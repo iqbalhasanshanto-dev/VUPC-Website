@@ -1528,7 +1528,7 @@
 
             <div class="wizard-actions">
               <button type="button" class="btn btn-back" id="backBtn">← Back</button>
-              <button type="button" class="btn btn-primary" id="nextBtn">Next →</button>
+              <button type="submit" class="btn btn-primary" id="nextBtn">Next →</button>
             </div>
           </form>
 
@@ -1904,7 +1904,7 @@
     if(wiz.step===0){
       html += `<div class="field ${wiz.errors.teamName?'error':''}">
         <label>Team Name <span class="req">*</span></label>
-        <input type="text" id="teamNameInput" enterkeyhint="next" placeholder="e.g. Byte Pirates" value="${wizEscape(wiz.teamName)}">
+        <input type="text" id="teamNameInput" placeholder="e.g. Byte Pirates" value="${wizEscape(wiz.teamName)}">
         <span class="error-msg">${wiz.errors.teamName||''}</span>
       </div>`;
     }
@@ -1916,12 +1916,12 @@
           <div class="field-grid">
             <div class="field ${wiz.errors[`m${i}name`]?'error':''}">
               <label>Full Name <span class="req">*</span></label>
-              <input type="text" data-m="${i}" data-k="name" enterkeyhint="next" placeholder="Full name" value="${wizEscape(m.name)}">
+              <input type="text" data-m="${i}" data-k="name" placeholder="Full name" value="${wizEscape(m.name)}">
               <span class="error-msg">${wiz.errors[`m${i}name`]||''}</span>
             </div>
             <div class="field ${wiz.errors[`m${i}id`]?'error':''}">
               <label>Student ID <span class="req">*</span></label>
-              <input type="text" data-m="${i}" data-k="id" enterkeyhint="next" placeholder="e.g. 2103xxx" value="${wizEscape(m.id)}">
+              <input type="text" data-m="${i}" data-k="id" placeholder="e.g. 2103xxx" value="${wizEscape(m.id)}">
               <span class="error-msg">${wiz.errors[`m${i}id`]||''}</span>
             </div>
             <div class="field ${wiz.errors[`m${i}sem`]?'error':''}">
@@ -1934,12 +1934,12 @@
             </div>
             <div class="field ${wiz.errors[`m${i}mobile`]?'error':''}">
               <label>Mobile Number <span class="req">*</span></label>
-              <input type="tel" data-m="${i}" data-k="mobile" enterkeyhint="next" placeholder="01XXXXXXXXX" value="${wizEscape(m.mobile)}">
+              <input type="tel" data-m="${i}" data-k="mobile" placeholder="01XXXXXXXXX" value="${wizEscape(m.mobile)}">
               <span class="error-msg">${wiz.errors[`m${i}mobile`]||''}</span>
             </div>
             <div class="field ${wiz.errors[`m${i}email`]?'error':''}">
               <label>Email <span class="req">*</span></label>
-              <input type="email" data-m="${i}" data-k="email" enterkeyhint="next" placeholder="name@example.com" value="${wizEscape(m.email)}">
+              <input type="email" data-m="${i}" data-k="email" placeholder="name@example.com" value="${wizEscape(m.email)}">
               <span class="error-msg">${wiz.errors[`m${i}email`]||''}</span>
             </div>
             <div class="field ${wiz.errors[`m${i}size`]?'error':''}">
@@ -1979,12 +1979,12 @@
           <div class="trx-note">${wiz.payMethod} selected — please provide your transaction details.</div>
           <div class="field ${wiz.errors.txnId?'error':''}" style="margin-bottom:0">
             <label>Transaction ID <span class="req">*</span></label>
-            <input type="text" id="txnIdInput" enterkeyhint="next" placeholder="e.g. 8N7K2QX9LM" value="${wizEscape(wiz.txnId)}">
+            <input type="text" id="txnIdInput" placeholder="e.g. 8N7K2QX9LM" value="${wizEscape(wiz.txnId)}">
             <span class="error-msg">${wiz.errors.txnId||''}</span>
           </div>
           <div class="field ${wiz.errors.txnPhone?'error':''}" style="margin-bottom:0">
             <label>Sender Mobile Number <span class="req">*</span></label>
-            <input type="tel" id="txnPhoneInput" enterkeyhint="next" placeholder="01XXXXXXXXX" value="${wizEscape(wiz.txnPhone)}">
+            <input type="tel" id="txnPhoneInput" placeholder="01XXXXXXXXX" value="${wizEscape(wiz.txnPhone)}">
             <span class="error-msg">${wiz.errors.txnPhone||''}</span>
           </div>
         </div>`;
@@ -2064,13 +2064,15 @@
     if(panel) panel.scrollIntoView({behavior: reduceMotion ? 'auto' : 'smooth', block:'start'});
   }
 
-  document.getElementById('backBtn').addEventListener('click', ()=>{
-    if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
-    if(wiz.step>0){ wiz.step--; renderWizard(); }
-    scrollWizardToTop();
-  });
-
-  document.getElementById('nextBtn').addEventListener('click', ()=>{
+  // "Next" is a real type="submit" button, so pressing Enter/Go/Next on a
+  // mobile keyboard while focused in any wizard field triggers the exact
+  // same native form-submission mechanism as tapping "Next →" — this is
+  // what those keyboard keys are built to do, and it's the one path every
+  // mobile browser/webview supports consistently (unlike trying to guess
+  // at keydown/keyCode combinations). We just intercept that single submit
+  // event, stop the page from actually navigating/reloading, and run the
+  // wizard's advance logic once.
+  function advanceWizard(){
     if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
 
     if(!wizValidate(wiz.step)){ renderWizard(); scrollWizardToTop(); return; }
@@ -2081,34 +2083,17 @@
       submitWizard();
     }
     scrollWizardToTop();
+  }
+
+  document.getElementById('regForm').addEventListener('submit', (e)=>{
+    e.preventDefault();
+    advanceWizard();
   });
 
-  // ---- keyboard "Enter" / mobile "Go"/"Next" fix ----
-  // The wizard lives inside a real <form>, and its Back/Next buttons are
-  // type="button" (they never natively submit anything). That means nothing
-  // was ever catching the browser's own default action for Enter: pressing
-  // Enter (or tapping Go/Next on a phone's on-screen keyboard) inside any
-  // input triggers the form's built-in "implicit submit", which — since the
-  // form has no action/onsubmit handler — just reloads the page and dumps
-  // the user back at the top. That's the "jumps to the landing page" bug.
-  //
-  // Fix: (1) swallow the form's native submit outright, and (2) treat Enter
-  // in any field as a proxy click on the same Next button people already use
-  // — so it runs the exact same per-step validation (every required box
-  // still has to be correctly filled) and only advances when that passes,
-  // exactly like tapping Next/Submit with a finger or mouse.
-  const regFormEl = document.getElementById('regForm');
-  regFormEl.addEventListener('submit', (e)=>{ e.preventDefault(); });
-  regFormEl.addEventListener('keydown', (e)=>{
-    if(e.key !== 'Enter') return;
-    const tag = e.target.tagName;
-    // Let real buttons (choice pills, etc.) keep their normal Enter-activates-click
-    // behavior, and don't hijack Enter inside a textarea (none currently exist,
-    // but this keeps line breaks working if one is ever added).
-    if(tag === 'BUTTON' || tag === 'TEXTAREA') return;
-    e.preventDefault();
-    const nb = document.getElementById('nextBtn');
-    if(!nb.disabled) nb.click();
+  document.getElementById('backBtn').addEventListener('click', ()=>{
+    if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    if(wiz.step>0){ wiz.step--; renderWizard(); }
+    scrollWizardToTop();
   });
 
   function submitWizard(){
