@@ -2068,15 +2068,13 @@
     if(panel) panel.scrollIntoView({behavior: reduceMotion ? 'auto' : 'smooth', block:'start'});
   }
 
-  // "Next" is a real type="submit" button, so pressing Enter/Go/Next on a
-  // mobile keyboard while focused in any wizard field triggers the exact
-  // same native form-submission mechanism as tapping "Next →" — this is
-  // what those keyboard keys are built to do, and it's the one path every
-  // mobile browser/webview supports consistently (unlike trying to guess
-  // at keydown/keyCode combinations). We just intercept that single submit
-  // event, stop the page from actually navigating/reloading, and run the
-  // wizard's advance logic once.
-  function advanceWizard(){
+  document.getElementById('backBtn').addEventListener('click', ()=>{
+    if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    if(wiz.step>0){ wiz.step--; renderWizard(); }
+    scrollWizardToTop();
+  });
+
+  document.getElementById('nextBtn').addEventListener('click', ()=>{
     if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
 
     if(!wizValidate(wiz.step)){ renderWizard(); scrollWizardToTop(); return; }
@@ -2087,17 +2085,6 @@
       submitWizard();
     }
     scrollWizardToTop();
-  }
-
-  document.getElementById('regForm').addEventListener('submit', (e)=>{
-    e.preventDefault();
-    advanceWizard();
-  });
-
-  document.getElementById('backBtn').addEventListener('click', ()=>{
-    if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
-    if(wiz.step>0){ wiz.step--; renderWizard(); }
-    scrollWizardToTop();
   });
 
   function submitWizard(){
@@ -2105,21 +2092,52 @@
     btn.disabled = true;
     btn.innerHTML = 'Submitting…';
 
-    setTimeout(()=>{
-      const fallbackId = 'VUPC_CH26-' + Math.random().toString(36).slice(2,7).toUpperCase();
-      const contactIdx = parseInt(wiz.contact.replace('Member ',''),10) - 1;
-      const contactMember = wiz.members[contactIdx] || {};
+    const fallbackId = 'VUPC_CH26-' + Math.random().toString(36).slice(2,7).toUpperCase();
+    const contactIdx = parseInt((wiz.contact || '1').replace('Member ',''), 10) - 1;
+    const contactMember = wiz.members[contactIdx] || wiz.members[0] || {};
 
-      // save via the shared CH_DB backend module (also read live by admin.html)
+    // ১. ফায়ারবেসে পাঠানোর জন্য সকল মেম্বার ও পেমেন্টের পূর্ণাঙ্গ ডাটা
+    const firebasePayload = {
+      name: wiz.teamName.trim(),
+      email: contactMember.email || (wiz.members[0] ? wiz.members[0].email : ''),
+      contactEmail: contactMember.email || (wiz.members[0] ? wiz.members[0].email : ''),
+      contactPhone: contactMember.mobile || '',
+      members: wiz.members.map(m => m.name.trim()).filter(Boolean).join(', '),
+      gateway: wiz.payMethod || 'bKash',
+      trx: wiz.txnId ? wiz.txnId.trim() : 'N/A',
+      trxPhone: wiz.txnPhone ? wiz.txnPhone.trim() : 'N/A',
+      status: "Active",
+      createdAt: new Date().toISOString(),
+      details: {
+        membersFull: wiz.members,
+        contactPerson: wiz.contact
+      }
+    };
+
+    // ২. সরাসরি Firebase Realtime Database-এ POST
+    fetch("https://vupc-official-web-default-rtdb.firebaseio.com/teams.json", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(firebasePayload)
+    })
+    .then(res => {
+      if (!res.ok) console.error("Firebase response error:", res.status);
+    })
+    .catch(err => console.error("Firebase network error:", err));
+
+    // ৩. পূর্বের PDF ডাউনলোড ও Success Modal লজিক
+    setTimeout(() => {
       const record = {
         teamName: wiz.teamName.trim(),
         email: contactMember.email || '',
-        members: wiz.members.map(m=>m.name.trim()).filter(Boolean).join(', '),
+        members: wiz.members.map(m => m.name.trim()).filter(Boolean).join(', '),
         gateway: wiz.payMethod,
         trxId: wiz.txnId.trim(),
         trxPhone: wiz.txnPhone.trim(),
         detail: {
-          membersFull: wiz.members.map(m=>({...m})),
+          membersFull: wiz.members.map(m => ({...m})),
           contact: wiz.contact,
         }
       };
@@ -2128,14 +2146,13 @@
       if (typeof CH_DB !== 'undefined') {
         saved = CH_DB.addTeam(record);
       } else {
-        console.error('CH_DB backend module not loaded — check that assets/backend.js is included.');
-        saved = Object.assign({id: fallbackId, registeredAt: new Date().toISOString()}, record);
+        saved = Object.assign({ id: fallbackId, registeredAt: new Date().toISOString() }, record);
       }
 
       wizLastReceipt = {
         id: saved.id || fallbackId,
         teamName: wiz.teamName.trim(),
-        members: wiz.members.map(m=>({...m})),
+        members: wiz.members.map(m => ({...m})),
         contact: wiz.contact,
         payMethod: wiz.payMethod,
         txnId: wiz.txnId.trim(),
@@ -2147,9 +2164,7 @@
       document.getElementById('teamNameText').textContent = wizLastReceipt.teamName;
       document.getElementById('successModal').classList.add('show');
 
-      // auto-download the PDF receipt immediately on successful registration
       downloadReceiptPdf();
-
       btn.disabled = false;
     }, 700);
   }
@@ -2327,6 +2342,5 @@
     });
   });
 </script>
-
 </body>
 </html>
